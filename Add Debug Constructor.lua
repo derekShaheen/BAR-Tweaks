@@ -1,7 +1,7 @@
 -- Dev Constructor v1 [Skrip]
 local includeCommanders = true
 
----------------------------
+-- Helper for copying an existing unit
 function table.deepcopy(orig)
   local orig_type = type(orig)
   local copy
@@ -20,9 +20,9 @@ end
 local UnitDefs = UnitDefs or {}
 -- Maps faction prefix to their builder units
 local factionBuilders = {
-  arm = { "armaca", "armack", "armacv", "armcom" },
-  cor = { "coraca", "corack", "coracv", "corcom" },
-  leg = { "legaca", "legack", "legacv", "legcom" },
+  arm = { "armaca", "armack", "armacv", "armcom" }, -- "armcom"
+  cor = { "coraca", "corack", "coracv", "corcom" }, -- "corcom"
+  leg = { "legaca", "legack", "legacv", "legcom" }, -- "legcom"
 }
 
 -- Adds a building to the buildoptions of each builder in the faction
@@ -127,7 +127,6 @@ if UnitDefs["skrip_constructor"] then
     def.maxwaterdepth = 60
     def.speed = 999
     def.workertime = maxedSetting
-    def.builddistance = maxedSetting
     def.energycost = 1
     def.metalcost = 1
     def.buildtime = 1

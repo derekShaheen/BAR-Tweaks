@@ -138,13 +138,36 @@ if UnitDefs["sk_armnanotct3"] then
   def.customparams.techlevel = 3
   def.objectname = "lootboxes/lootboxnanoarmT4.s3o"
   def.script = "lootboxes/lootboxnanoarm.cob"
-  def.footprintx = 4
-  def.footprintz = 4
+  def.footprintx = 6
+  def.footprintz = 6
+end
+
+cloneUnit("cornanotct2", "sk_cornanotct3", "Base Builder", "Assist & Repair in massive radius")
+if UnitDefs["sk_cornanotct3"] then
+  local def = UnitDefs["sk_cornanotct3"]
+  if Spring.GetModOptions().commanderbuildersbuildpower < 800 then -- use the set build power if it's greater than 800, otherwise hardcode to double the t2 con turret
+    def.workertime = (def.workertime or 600) * 2
+  else
+    def.workertime = Spring.GetModOptions().commanderbuildersbuildpower 
+  end
+  def.builddistance = (def.builddistance or 400) * 1.5
+  def.energycost = (def.energycost or 9000) * 3
+  def.metalcost = (def.metalcost or 1800) * 3
+  def.buildtime = (def.buildtime or 12000) * 2
+  def.health = (def.health or 2500) * 1.5
+  def.sightdistance = (def.sightdistance or 500) + 100
+  def.customparams.unitgroup = "utility"
+  def.customparams.techlevel = 3
+  def.objectname = "lootboxes/lootboxnanoarmT4.s3o"
+  def.script = "lootboxes/lootboxnanoarm.cob"
+  def.footprintx = 6
+  def.footprintz = 6
+  --def.maxslope = 255 -- 0 to 255
 end
 
 -- Add to normal builders
-addBuildingToFaction("sk_armaradt3", "utility")
-addBuildingToFaction("sk_armnanotct3", "builder")
+addBuildingToFaction("sk_armaradt3", nil, "utility")
+addBuildingToFaction("sk_armnanotct3", nil, "builder")
 
 -- Add builder to gantry
 addBuildingToSpecificUnits("armacv", { "armshltx" })
