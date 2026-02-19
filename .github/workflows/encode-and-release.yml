@@ -1,0 +1,60 @@
+name: Encode tweaks and (optionally) publish release
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare output
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist/encoded
+
+      - name: Base64 encode Lua tweaks (repo root)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for f in *.lua; do
+            out="dist/encoded/${f}.b64"
+            base64 -w 0 "$f" > "$out"
+          done
+
+      - name: Create manifest with sha256
+        run: |
+          set -euo pipefail
+          (
+            cd dist
+            find encoded -type f -print0 | sort -z | xargs -0 sha256sum
+          ) > dist/manifest.sha256
+
+      - name: Upload workflow artifacts (for non-tag pushes)
+        if: startsWith(github.ref, 'refs/tags/') == false
+        uses: actions/upload-artifact@v4
+        with:
+          name: bar-tweaks-b64
+          path: |
+            dist/encoded/*.b64
+            dist/manifest.sha256
+
+      - name: Create or update GitHub Release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/encoded/*.b64
+            dist/manifest.sha256
+          generate_release_notes: true
