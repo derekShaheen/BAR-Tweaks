@@ -1,4 +1,4 @@
-name: Publish Base64 Tweaks to GitHub Pages
+name: Publish BAR Tweaks Editor to GitHub Pages
 
 on:
   push:
@@ -22,12 +22,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Pages site
+        shell: bash
         run: |
           set -euo pipefail
+
           rm -rf site
           mkdir -p site/files
 
-          # Publish raw lua and base64 side-by-side
+          # Copy raw .lua and generate base64 alongside it
           shopt -s nullglob
           for f in *.lua; do
             cp "$f" "site/files/${f}.txt"
@@ -154,7 +156,6 @@ jobs:
                 const grid = document.createElement("div");
                 grid.className = "grid";
 
-                // Source panel
                 const sourceWrap = document.createElement("div");
                 const sourceTitle = document.createElement("div");
                 sourceTitle.className = "panelTitle";
@@ -164,6 +165,7 @@ jobs:
 
                 const sourceBtns = document.createElement("div");
                 sourceBtns.className = "btnbar";
+
                 const btnCopySource = document.createElement("button");
                 btnCopySource.textContent = "Copy source";
                 btnCopySource.onclick = () => copyText(btnCopySource, sourceArea.value);
@@ -185,7 +187,6 @@ jobs:
                 sourceBtns.append(btnCopySource, btnDownloadLua, btnEncode);
                 sourceWrap.append(sourceTitle, sourceArea, sourceBtns);
 
-                // Base64 panel
                 const b64Wrap = document.createElement("div");
                 const b64Title = document.createElement("div");
                 b64Title.className = "panelTitle";
@@ -218,7 +219,6 @@ jobs:
                 b64Wrap.append(b64Title, b64Area, b64Btns);
 
                 grid.append(sourceWrap, b64Wrap);
-
                 el.append(top, grid);
                 return el;
               }
@@ -251,12 +251,16 @@ jobs:
           </html>
           HTML
 
+          # Inject file list JSON into the HTML
           files_json="$(ls -1 *.lua 2>/dev/null | python3 -c 'import json,sys; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')"
-          python3 - <<PY
-          import pathlib
+          : "${files_json:=[]}"
+          export FILES_JSON="$files_json"
+
+          python3 - <<'PY'
+          import os, pathlib
           p = pathlib.Path("site/index.html")
           s = p.read_text(encoding="utf-8")
-          s = s.replace("__FILES__", files_json)
+          s = s.replace("__FILES__", os.environ.get("FILES_JSON", "[]"))
           p.write_text(s, encoding="utf-8")
           PY
 
