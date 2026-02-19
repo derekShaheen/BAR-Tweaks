@@ -1,0 +1,277 @@
+name: Publish Base64 Tweaks to GitHub Pages
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Pages site
+        run: |
+          set -euo pipefail
+          rm -rf site
+          mkdir -p site/files
+
+          # Publish raw lua and base64 side-by-side
+          shopt -s nullglob
+          for f in *.lua; do
+            cp "$f" "site/files/${f}.txt"
+            base64 -w 0 "$f" > "site/files/${f}.b64.txt"
+          done
+
+          cat > site/index.html <<'HTML'
+          <!doctype html>
+          <html>
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>BAR Tweaks – Editor + Base64</title>
+            <style>
+              body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; max-width: 1200px; }
+              header { display: flex; gap: 16px; align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
+              input { font-size: 16px; padding: 8px 10px; width: 420px; max-width: 100%; }
+              .muted { color: #666; font-size: 13px; }
+              .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 14px 0; }
+              .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+              .name { font-weight: 650; }
+              .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+              @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } }
+              textarea {
+                width: 100%;
+                min-height: 220px;
+                resize: vertical;
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+                font-size: 12px;
+                line-height: 1.35;
+                border-radius: 12px;
+                border: 1px solid #e6e6e6;
+                padding: 10px;
+                background: #fafafa;
+                box-sizing: border-box;
+                white-space: pre;
+              }
+              .panelTitle { font-size: 13px; font-weight: 650; margin: 0 0 6px 2px; }
+              button { padding: 7px 10px; border-radius: 10px; border: 1px solid #bbb; background: #f7f7f7; cursor: pointer; }
+              button:hover { background: #eee; }
+              .btnbar { display: flex; gap: 8px; flex-wrap: wrap; }
+              .pill { font-size: 12px; padding: 2px 8px; border: 1px solid #ddd; border-radius: 999px; color: #444; background: #fff; }
+            </style>
+          </head>
+          <body>
+            <header>
+              <div>
+                <h1 style="margin:0;">BAR Tweaks – Editor + Base64</h1>
+                <div class="muted">Edit source, encode/decode in-browser, copy or download. Changes here do not auto-save to the repo.</div>
+              </div>
+              <input id="q" placeholder="Filter by filename…" />
+            </header>
+
+            <div id="list"></div>
+
+            <script>
+              const files = __FILES__;
+
+              async function fetchText(url) {
+                const r = await fetch(url, { cache: "no-store" });
+                if (!r.ok) throw new Error(`Failed ${url}: ${r.status}`);
+                return await r.text();
+              }
+
+              function toBase64Utf8(str) {
+                const bytes = new TextEncoder().encode(str);
+                let bin = "";
+                for (const b of bytes) bin += String.fromCharCode(b);
+                return btoa(bin);
+              }
+
+              function fromBase64Utf8(b64) {
+                const clean = b64.replace(/\s+/g, "");
+                const bin = atob(clean);
+                const bytes = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                return new TextDecoder().decode(bytes);
+              }
+
+              async function copyText(btn, text) {
+                await navigator.clipboard.writeText(text);
+                const old = btn.textContent;
+                btn.textContent = "Copied!";
+                setTimeout(() => btn.textContent = old, 900);
+              }
+
+              function downloadText(filename, text) {
+                const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+              }
+
+              function makeCard(name, sourceText, b64Text) {
+                const el = document.createElement("div");
+                el.className = "card";
+                el.dataset.name = name.toLowerCase();
+
+                const top = document.createElement("div");
+                top.className = "row";
+
+                const left = document.createElement("div");
+                left.innerHTML = `<span class="name">${name}</span> <span class="pill">${sourceText.length} chars</span> <span class="pill">${b64Text.replace(/\\s+/g,'').length} b64 chars</span>`;
+
+                const btnRawSource = document.createElement("button");
+                btnRawSource.textContent = "Open source raw";
+                btnRawSource.onclick = () => window.open(`files/${encodeURIComponent(name)}.txt`, "_blank");
+
+                const btnRawB64 = document.createElement("button");
+                btnRawB64.textContent = "Open base64 raw";
+                btnRawB64.onclick = () => window.open(`files/${encodeURIComponent(name)}.b64.txt`, "_blank");
+
+                const right = document.createElement("div");
+                right.className = "btnbar";
+                right.append(btnRawSource, btnRawB64);
+
+                top.append(left, right);
+
+                const grid = document.createElement("div");
+                grid.className = "grid";
+
+                // Source panel
+                const sourceWrap = document.createElement("div");
+                const sourceTitle = document.createElement("div");
+                sourceTitle.className = "panelTitle";
+                sourceTitle.textContent = "Source (.lua)";
+                const sourceArea = document.createElement("textarea");
+                sourceArea.value = sourceText;
+
+                const sourceBtns = document.createElement("div");
+                sourceBtns.className = "btnbar";
+                const btnCopySource = document.createElement("button");
+                btnCopySource.textContent = "Copy source";
+                btnCopySource.onclick = () => copyText(btnCopySource, sourceArea.value);
+
+                const btnDownloadLua = document.createElement("button");
+                btnDownloadLua.textContent = "Download .lua";
+                btnDownloadLua.onclick = () => downloadText(name, sourceArea.value);
+
+                const btnEncode = document.createElement("button");
+                btnEncode.textContent = "Encode → base64";
+                btnEncode.onclick = () => {
+                  try {
+                    b64Area.value = toBase64Utf8(sourceArea.value);
+                  } catch (e) {
+                    alert("Encode failed: " + e);
+                  }
+                };
+
+                sourceBtns.append(btnCopySource, btnDownloadLua, btnEncode);
+                sourceWrap.append(sourceTitle, sourceArea, sourceBtns);
+
+                // Base64 panel
+                const b64Wrap = document.createElement("div");
+                const b64Title = document.createElement("div");
+                b64Title.className = "panelTitle";
+                b64Title.textContent = "Base64";
+                const b64Area = document.createElement("textarea");
+                b64Area.value = b64Text.trim();
+
+                const b64Btns = document.createElement("div");
+                b64Btns.className = "btnbar";
+
+                const btnCopyB64 = document.createElement("button");
+                btnCopyB64.textContent = "Copy base64";
+                btnCopyB64.onclick = () => copyText(btnCopyB64, b64Area.value.trim());
+
+                const btnDownloadB64 = document.createElement("button");
+                btnDownloadB64.textContent = "Download .b64";
+                btnDownloadB64.onclick = () => downloadText(`${name}.b64.txt`, b64Area.value.trim());
+
+                const btnDecode = document.createElement("button");
+                btnDecode.textContent = "Decode → source";
+                btnDecode.onclick = () => {
+                  try {
+                    sourceArea.value = fromBase64Utf8(b64Area.value);
+                  } catch (e) {
+                    alert("Decode failed: " + e);
+                  }
+                };
+
+                b64Btns.append(btnCopyB64, btnDownloadB64, btnDecode);
+                b64Wrap.append(b64Title, b64Area, b64Btns);
+
+                grid.append(sourceWrap, b64Wrap);
+
+                el.append(top, grid);
+                return el;
+              }
+
+              async function main() {
+                const list = document.getElementById("list");
+
+                for (const f of files) {
+                  const [src, b64] = await Promise.all([
+                    fetchText(`files/${encodeURIComponent(f)}.txt`),
+                    fetchText(`files/${encodeURIComponent(f)}.b64.txt`),
+                  ]);
+                  list.appendChild(makeCard(f, src, b64));
+                }
+
+                const q = document.getElementById("q");
+                q.addEventListener("input", () => {
+                  const term = q.value.trim().toLowerCase();
+                  for (const c of list.children) {
+                    c.style.display = c.dataset.name.includes(term) ? "" : "none";
+                  }
+                });
+              }
+
+              main().catch(err => {
+                document.getElementById("list").innerHTML = `<div class="card"><b>Error:</b> ${err}</div>`;
+              });
+            </script>
+          </body>
+          </html>
+          HTML
+
+          files_json="$(ls -1 *.lua 2>/dev/null | python3 -c 'import json,sys; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')"
+          python3 - <<PY
+          import pathlib
+          p = pathlib.Path("site/index.html")
+          s = p.read_text(encoding="utf-8")
+          s = s.replace("__FILES__", files_json)
+          p.write_text(s, encoding="utf-8")
+          PY
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

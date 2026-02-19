@@ -56,5 +56,4 @@ jobs:
         with:
           files: |
             dist/encoded/*.b64
-            dist/manifest.sha256
           generate_release_notes: true
